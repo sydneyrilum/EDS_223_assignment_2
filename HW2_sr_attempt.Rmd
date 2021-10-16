@@ -1,0 +1,128 @@
+---
+title: "Assignment 2- Spatial Analysis"
+author: "Sydney Rilum"
+date: "10/16/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(sf)
+library(stars)
+library(stringr)
+library(rgdal)
+```
+
+## Summary
+
+“In February 2021, the state of Texas suffered a major power crisis, which came about as a result of three severe winter storms sweeping across the United States on February 10–11, 13–17, and 15–20.”
+
+In the project, we aim to:
+
+- Estimate how many homes in Houston went without power as a result of the first two storms.
+- Investigate the differences in recovery of different suburbs in Houston. Specifically, investigate if any socioeconomic factors are predictors of a community’s recovery from a power outage.
+
+## Load the night lights image data
+
+Night lights image data for clear days before and after the storm (2021-02-07, 2021-02-16) were acquired from NASA’s Level-1 and Atmosphere Archive & Distribution System Distributed Active Archive Center (LAADS DAAC). 
+
+```{r}
+# Create a function to load the DNB dataset from VNP46A1 granules
+
+read_dnb <- function(file_name) {
+
+  # Reads the "DNB_At_Sensor_Radiance_500m" dataset from a VNP46A1 granule into a STARS object.
+  # Then read the sinusoidal tile x/y positions and adjust the STARS dimensions (extent+delta)
+
+  # the HDF dataset (within the file) that contains the night lights band
+  dataset_name <- "//HDFEOS/GRIDS/VNP_Grid_DNB/Data_Fields/DNB_At_Sensor_Radiance_500m"
+
+  # Extract strings from file metadata containing the horizontal and vertical tile coords
+  h_string <- gdal_metadata(file_name)[199]
+  v_string <- gdal_metadata(file_name)[219]
+  
+  # Parse the h/v string to extract the integer number of h and v coords
+  tile_h <- as.integer(str_split(h_string, "=", simplify = TRUE)[[2]])
+  tile_v <- as.integer(str_split(v_string, "=", simplify = TRUE)[[2]])
+
+  # Calculate geographic bounding box from tile coords (tile is 10 x 10 degrees)
+  west <- (10 * tile_h) - 180
+  north <- 90 - (10 * tile_v)
+  east <- west + 10
+  south <- north - 10
+
+  # Calculate cell size in geographic coords (a tile is 10 degrees and has 2400 x 2400 grid cells/pixels)
+  # NOTE: this is just to determine the coords of each pixel; we're NOT going to measure distances or areas in degrees! 
+  delta <- 10 / 2400
+
+  # Read the dataset
+  dnb <- read_stars(file_name, sub = dataset_name)
+
+  # Set CRS, apply origin (aka offset) and cell size (aka delta)
+  st_crs(dnb) <- st_crs(4326)
+  st_dimensions(dnb)$x$delta <- delta
+  st_dimensions(dnb)$x$offset <- west
+  st_dimensions(dnb)$y$delta <- -delta
+  st_dimensions(dnb)$y$offset <- north
+  
+  return(dnb)
+}
+```
+
+```{r}
+# Call the read_dnb() four times to load the four datasets into four stars objects:
+
+day38_tile85_2021039064328 <- "data/VNP46A1.A2021038.h08v05.001.2021039064328.h5"
+dnb_day38_tile85_2021039064328 <- read_dnb(file_name = day38_tile85_2021039064328)
+
+day38_tile86_2021039064329 <- "data/VNP46A1.A2021038.h08v06.001.2021039064329.h5"
+dnb_day38_tile86_2021039064329 <- read_dnb(file_name = day38_tile86_2021039064329)
+
+day47_tile85_2021048091106 <- "data/VNP46A1.A2021047.h08v05.001.2021048091106.h5"
+dnb_day47_tile85_2021048091106 <- read_dnb(file_name = day47_tile85_2021048091106)
+
+day47_tile86_2021048091105 <- "data/VNP46A1.A2021047.h08v06.001.2021048091105.h5"
+dnb_day47_tile86_2021048091105 <- read_dnb(file_name = day47_tile86_2021048091105)
+```
+
+
+## Combine the data
+
+```{r}
+# Combine each pair of tiles into a single stars object for each date (2021-02-07 and 2021-02-16)
+
+combined_lights_2021_02_07 <- st_mosaic(dnb_day38_tile85_2021039064328, 
+                                        dnb_day38_tile86_2021039064329)
+
+combined_lights_2021_02_16 <- st_mosaic(dnb_day47_tile85_2021048091106, 
+                                        dnb_day47_tile86_2021048091105)
+
+# Delete the previously loaded stars objects from environment
+
+rm(dnb_day38_tile85_2021039064328, 
+   dnb_day38_tile86_2021039064329,
+   dnb_day47_tile85_2021048091106, 
+   dnb_day47_tile86_2021048091105)
+```
+
+```{r}
+# Visual check of combined lights outputs
+plot(combined_lights_2021_02_07)
+plot(combined_lights_2021_02_16)
+```
+
+## Create a blackout mask
+
+Subtract the night lights intensity after the storm from the night lights intensity before the storm to get the difference in night lights intensity caused (presumably) by the storm.
+
+Next, reclassify the difference raster. Assume that any location that experienced a drop of more than 200 nW cm-2 sr-1 is a location of a blackout.
+
+Hint: we can use binary predicates to do a reclassification.
+
+Assign NA to all values that have experienced a drop of less than 200 nW cm-2 sr-1.
+
+
+```{r}
+
+```
+
