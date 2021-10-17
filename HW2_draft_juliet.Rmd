@@ -139,8 +139,10 @@ summary(difference_light)
 difference_light_200_min <- (after_combined - before_combined) > 200
 difference_light_200_min_df <- as.data.frame(difference_light_200_min, xy = TRUE)
 # check out what values are left in the light column
+unique(difference_light_200_min$DNB_At_Sensor_Radiance_500m)
+# not sure how to interpret the output of this, there are many numbers, so it appears that the raster version of this data did NOT set values <200 = FALSE and values > 200 = TRUE ?
 unique(difference_light_200_min_df$DNB_At_Sensor_Radiance_500m)
-# now we can see that all values that are above 200 are TRUE and values that are below 200 are FALSE
+# in the dataframe, all values that are above 200 are TRUE and values that are below 200 are FALSE
 
 ```
 
@@ -153,14 +155,16 @@ str_replace(difference_light_200_min_df$DNB_At_Sensor_Radiance_500m, "FALSE", "N
 
 # see if it worked
 unique(difference_light_200_min_df$DNB_At_Sensor_Radiance_500m)
-# it didn't
+# the only values within this column are TRUE and FALSE
 ```
 
 ```{r}
-# Assign NA to all values that have experienced a drop of less than 200 nW cm-2 sr-1.
+# Assign NA to all values that have experienced a drop of less than 200 nW cm-2 sr-
 
-replace_with_na_if(difference_light_raw_df, is.numeric, ~.x <= 200)
-class(difference_light_raw_df$DNB_At_Sensor_Radiance_500m)
+# try using the function # replace_with_na_if()
+
+#replace_with_na_if(difference_light_raw_df, is.numeric, ~.x <= 200)
+#class(difference_light_raw_df$DNB_At_Sensor_Radiance_500m)
 ```
 
 
