@@ -1,0 +1,175 @@
+---
+title: "HW2_draft_juliet"
+author: "Juliet"
+date: "10/16/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loading packages}
+library(sf)
+library(stringr)
+library(stars)
+library(rgdal)
+library(here)
+library(spDataLarge)
+library(extremevalues)
+# use this package to call data about rasters, but I ended up not being successful in this, so I converted the rasters to df's so I can see if my wrangling steps work, not sure if this will be an issue later if/when we convert these df's back to rasters
+library(tidyverse)
+# use the tidyverse to manipulate the df's we create from the rasters in our data wrangling
+library(naniar)
+# use this package to use the function repalce_with_na()
+```
+
+
+# Function to load the DNB dataset from VNP46A1 granules
+```{r}
+read_dnb <- function(file_name) {
+  # Reads the "DNB_At_Sensor_Radiance_500m" dataset from a VNP46A1 granule into a STARS object.
+  # Then read the sinolsoidal tile x/y positions and adjust the STARS dimensions (extent+delta)
+  # The name of the dataset holding the nightlight band in the granule
+  dataset_name <- "//HDFEOS/GRIDS/VNP_Grid_DNB/Data_Fields/DNB_At_Sensor_Radiance_500m"
+  # From the metadata, we pull out a string containing the horizontal and vertical tile index
+  h_string <- gdal_metadata(file_name)[199]
+  v_string <- gdal_metadata(file_name)[219]
+  
+  # We parse the h/v string to pull out the integer number of h and v
+  tile_h <- as.integer(str_split(h_string, "=", simplify = TRUE)[[2]])
+  tile_v <- as.integer(str_split(v_string, "=", simplify = TRUE)[[2]])
+  # From the h/v tile grid position, we get the offset and the extent
+  west <- (10 * tile_h) - 180
+  north <- 90 - (10 * tile_v)
+  east <- west + 10
+  south <- north - 10
+  # A tile is 10 degrees and has 2400x2400 grid cells
+  delta <- 10 / 2400
+  # Reading the dataset
+  dnb <- read_stars(file_name, sub = dataset_name)
+  # Setting the CRS and applying offsets and deltas
+  st_crs(dnb) <- st_crs(4326)
+  st_dimensions(dnb)$x$delta <- delta
+  st_dimensions(dnb)$x$offset <- west
+  st_dimensions(dnb)$y$delta <- -delta
+  st_dimensions(dnb)$y$offset <- north
+  
+  return(dnb)
+}
+```
+
+```{r}
+# read in the data 4 times, one time for each file, giving names that describe both the tile coordinates as well as the aquisition time
+
+tile_5_aquired_039 <- "VNP46A1.A2021038.h08v05.001.2021039064328.h5"
+dnb_tile_5_aquired_039 <- read_dnb(here("data", tile_5_aquired_039))
+
+tile_6_aquired_039 <- "VNP46A1.A2021038.h08v06.001.2021039064329.h5"
+dnb_tile_6_aquired_039 <- read_dnb(here("data", tile_6_aquired_039))
+
+tile_5_aquired_048 <- "VNP46A1.A2021047.h08v05.001.2021048091106.h5"
+dnb_tile_5_aquired_048 <- read_dnb(here("data", tile_5_aquired_048))
+
+tile_6_aquired_048 <- "VNP46A1.A2021047.h08v06.001.2021048091105.h5"
+dnb_tile_6_aquired_048 <- read_dnb(here("data", tile_6_aquired_048))
+                               
+```
+
+```{r}
+# combine the data
+# Use st_mosaic() to combine each pair of tiles into a single stars object for each date (2021-02-07 and 2021-02-16). Delete the previously loaded 4 objects from your environment using rm() to save space and prevent R from crashing
+
+before_combined <- st_mosaic(dnb_tile_5_aquired_039, dnb_tile_6_aquired_039)
+
+after_combined <- st_mosaic(dnb_tile_5_aquired_048, dnb_tile_6_aquired_048)
+
+# now delete the previously stored dnb objects because all we are working with going forward are the combined mosaic tiles
+
+rm(dnb_tile_5_aquired_039,
+   dnb_tile_6_aquired_039,
+   dnb_tile_5_aquired_048,
+   dnb_tile_6_aquired_048)
+```
+
+```{r}
+# plot them to check out the pictures!
+plot(before_combined)
+plot(after_combined)
+# odd observation: the "after" image looks brighter, which is the opposite of what we would expect to see. This is due to the fact that the plot() fuction sets the breaks on the quantiles for each plot independently, so we need to adjust for this (standardize the breaks for both)
+plot(before_combined, 
+     ylim =c(29, 30.5) , xlim = c(-94.5, -96.5), 
+     breaks=seq(0, 2000, length.out = 1000))
+plot(after_combined, 
+     ylim =c(29, 30.5) , xlim = c(-94.5, -96.5),
+     breaks=seq(0, 2000, length.out = 1000))
+# this makes the graphs very grainy, but it shows the difference in light in a more standardized way!
+```
+
+
+```{r}
+# create a blackout mask: get the difference in lighting
+#Subtract the night lights intensity after the storm from the night lights intensity before the storm to get the difference in night lights intensity caused (presumably) by the storm.
+
+# The immediately following code line (subtracting after from before) is my first attempt at subtraction, but apparently the variables need to be flipped. My initial approach SHOULD be the intuitive subtraction because we expect the before image to have more light than the image after the power outage, but due to external factors when the satellite picked up these images, the after layer actually is the layer with more light. So we need to swap these variables, as we do in the next line of code. I want to think more abou this, because the result of this subtraction assigns a positive or negative value to each point, so we need to be sure that we are subtracting in the right order.
+
+#difference_light <- before_combined - after_combined
+difference_light <- after_combined - before_combined
+
+plot(difference_light)
+
+# view the raster as a dataframe to see some numbers!
+
+difference_light_raw_df <- as.data.frame(difference_light, xy = TRUE)
+
+#check out some summary stats cause there's so many rows:
+summary(difference_light_raw_df$DNB_At_Sensor_Radiance_500m)
+
+#Next, reclassify the difference raster. Assume that any location that experienced a drop of more than 200 nW cm-2 sr-1 is a location of a blackout.
+# Hint: we can use binary predicates to do a reclassification.
+
+# on the slack channel, Niklas confirmed that the layers are already rasters. The class() function returns "stars" which is in quotes, so I am not sure how to interpret that. summary() returns that it has no class...?
+class(difference_light)
+summary(difference_light)
+```
+
+```{r}
+# now filter the data so that the difference threshold is 200 nW cm-2 sr-1, meaning we only keep values in the difference_light raster that are above this value
+
+difference_light_200_min <- (after_combined - before_combined) > 200
+difference_light_200_min_df <- as.data.frame(difference_light_200_min, xy = TRUE)
+# check out what values are left in the light column
+unique(difference_light_200_min_df$DNB_At_Sensor_Radiance_500m)
+# now we can see that all values that are above 200 are TRUE and values that are below 200 are FALSE
+
+```
+
+```{r}
+# Assign NA to all values that have experienced a drop of less than 200 nW cm-2 sr-1.
+#colnames(difference_light_200_min_df)
+
+#difference_light_200_min_df_NA <- difference_light_200_min_df %>% 
+str_replace(difference_light_200_min_df$DNB_At_Sensor_Radiance_500m, "FALSE", "NA")
+
+# see if it worked
+unique(difference_light_200_min_df$DNB_At_Sensor_Radiance_500m)
+# it didn't
+```
+
+```{r}
+# Assign NA to all values that have experienced a drop of less than 200 nW cm-2 sr-1.
+
+replace_with_na_if(difference_light_raw_df, is.numeric, ~.x <= 200)
+class(difference_light_raw_df$DNB_At_Sensor_Radiance_500m)
+```
+
+
+
+
+
+
+
+
+
+
+
