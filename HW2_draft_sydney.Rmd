@@ -113,16 +113,74 @@ plot(combined_lights_2021_02_16)
 
 ## Create a blackout mask
 
-Subtract the night lights intensity after the storm from the night lights intensity before the storm to get the difference in night lights intensity caused (presumably) by the storm.
+Subtract the night lights intensity after the storm from the night lights intensity before the storm to get the difference in night lights intensity caused (presumably) by the storm. Reclassify the difference raster. Assume that any location that experienced a drop of more than 200 nW cm-2 sr-1 is a location of a blackout. 
+```{r}
+difference_light <- combined_lights_2021_02_16 - combined_lights_2021_02_07 > 200
 
-Next, reclassify the difference raster. Assume that any location that experienced a drop of more than 200 nW cm-2 sr-1 is a location of a blackout.
-
-Hint: we can use binary predicates to do a reclassification.
+plot(difference_light)
+```
 
 Assign NA to all values that have experienced a drop of less than 200 nW cm-2 sr-1.
+```{r}
+# change FALSE values to NA's
+difference_light[difference_light == F] <- NA
+```
 
+## Vectorize the mask
 
 ```{r}
+# vectorize blackout mask raster
+blackout <- st_as_sf(difference_light)
+```
+
+```{r}
+# fix "broken" vector dataset (i.e., fix polygons with invalid geometries)
+blackout_mask <- st_make_valid(blackout)
+```
+
+## Crop the vectorized map to our ROI
+
+Our region of interest (ROI) is the metropolitan Houston area. 
+We define the ROI with a bounding box of:
+-96.5, 29
+-96.5, 30.5
+-94.5, 30.5
+-94.5, 29
+
+```{r}
+# create ROI polygon from coordinates
+ROI = st_polygon(list(rbind(c(-96.5, 29), c(-96.5, 30.5), c(-94.5, 30.5), c(-94.5, 29), c(-96.5, 29))))
 
 ```
+
+```{r}
+# convert the polygon into a simple feature collection using st_sfc()
+ROI <- st_sfc(ROI)
+
+# check CRS of night lights data
+st_crs(blackout_mask) # WGS84
+
+# assign same CRS to ROI sfc
+st_crs(ROI) <- 4326 
+# quick check
+st_crs(ROI) #WGS84
+```
+
+```{r}
+# spatial subsetting in sf
+intersects <- st_intersects(blackout_mask, ROI, sparse = FALSE)
+cropped_mask = blackout_mask[intersects,]
+```
+
+```{r}
+# re-project the cropped blackout dataset to EPSG:3083 (NAD83 / Texas Centric Albers Equal Area)
+st_transform(cropped_mask) <- 3083
+```
+
+
+## Roads Data
+
+
+
+
 
