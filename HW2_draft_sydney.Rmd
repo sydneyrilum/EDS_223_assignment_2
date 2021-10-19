@@ -174,11 +174,60 @@ cropped_mask = blackout_mask[intersects,]
 
 ```{r}
 # re-project the cropped blackout dataset to EPSG:3083 (NAD83 / Texas Centric Albers Equal Area)
-st_transform(cropped_mask) <- 3083
+cropped_mask = st_transform(cropped_mask, crs = 3083)
+
+# quick check
+st_crs(cropped_mask) #NAD83
 ```
 
 
 ## Roads Data
+
+During normal times, highways account for a large portion of the night lights observable from space. To minimize falsely identifying areas with reduced traffic as areas without power, we will ignore areas areas near highways.
+
+Load GeoPackage containing the subset of roads that intersect the Houston metropolitan area.
+
+```{r}
+# load roads data, and isolate highways specifically
+query <- "SELECT * FROM gis_osm_roads_free_1 WHERE fclass='motorway'"
+```
+
+```{r}
+highways <- st_read("data/gis_osm_roads_free_1.gpkg", query = query)
+```
+
+```{r}
+# check crs projection of highways dataset
+st_crs(highways) #WGS84
+
+# change crs to NAD83
+highways = st_transform(highways, crs = 3083)
+```
+
+```{r}
+# identify areas 200 m either side of all highways
+
+st_buffer()
+
+
+# dissolve buffers
+
+st_union()
+
+
+```
+
+
+
+## Buildings Data
+
+
+## Census Tract Data
+
+
+
+
+
 
 
 
