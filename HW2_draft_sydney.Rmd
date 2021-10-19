@@ -22,6 +22,8 @@ In the project, we aim to:
 - Estimate how many homes in Houston went without power as a result of the first two storms.
 - Investigate the differences in recovery of different suburbs in Houston. Specifically, investigate if any socioeconomic factors are predictors of a community’s recovery from a power outage.
 
+### Data Wrangling
+
 ## Load the night lights image data
 
 Night lights image data for clear days before and after the storm (2021-02-07, 2021-02-16) were acquired from NASA’s Level-1 and Atmosphere Archive & Distribution System Distributed Active Archive Center (LAADS DAAC). 
@@ -169,15 +171,15 @@ st_crs(ROI) #WGS84
 ```{r}
 # spatial subsetting in sf
 intersects <- st_intersects(blackout_mask, ROI, sparse = FALSE)
-cropped_mask = blackout_mask[intersects,]
+cropped_blackout_mask = blackout_mask[intersects,]
 ```
 
 ```{r}
 # re-project the cropped blackout dataset to EPSG:3083 (NAD83 / Texas Centric Albers Equal Area)
-cropped_mask = st_transform(cropped_mask, crs = 3083)
+cropped_blackout_mask = st_transform(cropped_blackout_mask, crs = 3083)
 
 # quick check
-st_crs(cropped_mask) #NAD83
+st_crs(cropped_blackout_mask) #NAD83
 ```
 
 
@@ -206,26 +208,86 @@ highways = st_transform(highways, crs = 3083)
 
 ```{r}
 # identify areas 200 m either side of all highways
-
-st_buffer()
-
+highways_buffer = st_buffer(highways, 200)
 
 # dissolve buffers
-
-st_union()
-
-
+highways_buffer = st_union(highways_buffer)
 ```
-
 
 
 ## Buildings Data
 
+Load GeoPackage containing only houses in the Houston metropolitan area.
+```{r}
+# load buidlings dataset, using the query argument to select only residential buildings
+query2 <- "SELECT * FROM gis_osm_buildings_a_free_1 WHERE (type IS NULL AND name IS NULL) OR type in ('residential', 'apartments', 'house', 'static_caravan', 'detached')"
+```
+
+```{r}
+houses <- st_read("data/gis_osm_buildings_a_free_1.gpkg", query = query2)
+```
+
+```{r}
+# check crs projection of houses dataset
+st_crs(houses) #WGS84
+
+# change crs to NAD83
+houses = st_transform(houses, crs = 3083)
+```
+
 
 ## Census Tract Data
 
+```{r}
+# explore socioeconomic data layers from the U.S. Census Bureau’s American Community Survey for Texas census tracts in 2019
+st_layers(dsn = "data/ACS_2019_5YR_TRACT_48_TEXAS.gdb")
+```
 
 
+```{r}
+# load in texas geometries layer
+acs_geoms <- st_read("data/ACS_2019_5YR_TRACT_48_TEXAS.gdb",
+                     layer = "ACS_2019_5YR_TRACT_48_TEXAS")
+
+# load in income layer
+acs_income <- st_read("data/ACS_2019_5YR_TRACT_48_TEXAS.gdb",
+                      layer = "X19_INCOME")
+```
+
+
+## Merge the datasets
+
+```{r}
+# remove highway buffer from vectorized blackout mask to ignore areas around highways
+cropped_blackout_mask_wo_highways = st_difference(cropped_blackout_mask, highways_buffer)
+
+```
+
+```{r}
+# visual check
+plot(cropped_blackout_mask)
+plot(highways_buffer)
+plot(cropped_blackout_mask_wo_highways)
+```
+
+```{r}
+# use spatial subsetting to find all the residential buildings in blackout areas
+houses_blackout <- st_intersects(cropped_blackout_mask_wo_highways, houses, sparse = FALSE)
+cropped_houses_mask = cropped_blackout_mask_wo_highways[houses_blackout,]
+```
+
+```{r}
+# spatial join of building data with joined ACS data
+# joined <- st_join()
+
+```
+
+
+### Analysis
+
+Question 1: How many residential buildings were without power on 2021-02-16?
+
+Bonus question: Is there a socioeconomic metric that predicts being affected by the power outage?
 
 
 
