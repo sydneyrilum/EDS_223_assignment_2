@@ -117,7 +117,7 @@ plot(combined_lights_2021_02_16)
 
 Subtract the night lights intensity after the storm from the night lights intensity before the storm to get the difference in night lights intensity caused (presumably) by the storm. Reclassify the difference raster. Assume that any location that experienced a drop of more than 200 nW cm-2 sr-1 is a location of a blackout. 
 ```{r}
-difference_light <- combined_lights_2021_02_16 - combined_lights_2021_02_07 > 200
+difference_light <- (combined_lights_2021_02_16 - combined_lights_2021_02_07) > 200
 
 plot(difference_light)
 ```
@@ -175,6 +175,11 @@ cropped_blackout_mask = blackout_mask[intersects,]
 ```
 
 ```{r}
+# remove large datasets from environment
+rm(intersects)
+```
+
+```{r}
 # re-project the cropped blackout dataset to EPSG:3083 (NAD83 / Texas Centric Albers Equal Area)
 cropped_blackout_mask = st_transform(cropped_blackout_mask, crs = 3083)
 
@@ -191,11 +196,11 @@ Load GeoPackage containing the subset of roads that intersect the Houston metrop
 
 ```{r}
 # load roads data, and isolate highways specifically
-query <- "SELECT * FROM gis_osm_roads_free_1 WHERE fclass='motorway'"
+roads_query <- "SELECT * FROM gis_osm_roads_free_1 WHERE fclass='motorway'"
 ```
 
 ```{r}
-highways <- st_read("data/gis_osm_roads_free_1.gpkg", query = query)
+highways <- st_read("data/gis_osm_roads_free_1.gpkg", query = roads_query)
 ```
 
 ```{r}
@@ -211,7 +216,7 @@ highways = st_transform(highways, crs = 3083)
 highways_buffer = st_buffer(highways, 200)
 
 # dissolve buffers
-highways_buffer = st_union(highways_buffer)
+highways_dissolved = st_union(highways_buffer)
 ```
 
 
@@ -220,11 +225,11 @@ highways_buffer = st_union(highways_buffer)
 Load GeoPackage containing only houses in the Houston metropolitan area.
 ```{r}
 # load buidlings dataset, using the query argument to select only residential buildings
-query2 <- "SELECT * FROM gis_osm_buildings_a_free_1 WHERE (type IS NULL AND name IS NULL) OR type in ('residential', 'apartments', 'house', 'static_caravan', 'detached')"
+buildings_query <- "SELECT * FROM gis_osm_buildings_a_free_1 WHERE (type IS NULL AND name IS NULL) OR type in ('residential', 'apartments', 'house', 'static_caravan', 'detached')"
 ```
 
 ```{r}
-houses <- st_read("data/gis_osm_buildings_a_free_1.gpkg", query = query2)
+houses <- st_read("data/gis_osm_buildings_a_free_1.gpkg", query = buildings_query)
 ```
 
 ```{r}
@@ -252,6 +257,7 @@ acs_geoms <- st_read("data/ACS_2019_5YR_TRACT_48_TEXAS.gdb",
 # load in income layer
 acs_income <- st_read("data/ACS_2019_5YR_TRACT_48_TEXAS.gdb",
                       layer = "X19_INCOME")
+
 ```
 
 
@@ -259,26 +265,35 @@ acs_income <- st_read("data/ACS_2019_5YR_TRACT_48_TEXAS.gdb",
 
 ```{r}
 # remove highway buffer from vectorized blackout mask to ignore areas around highways
-cropped_blackout_mask_wo_highways = st_difference(cropped_blackout_mask, highways_buffer)
+cropped_blackout_mask_wo_highways = st_difference(cropped_blackout_mask, highways_dissolved)
 
 ```
 
 ```{r}
 # visual check
 plot(cropped_blackout_mask)
-plot(highways_buffer)
+plot(highways_dissolved)
 plot(cropped_blackout_mask_wo_highways)
 ```
 
 ```{r}
 # use spatial subsetting to find all the residential buildings in blackout areas
+
+### memory issues to run
 houses_blackout <- st_intersects(cropped_blackout_mask_wo_highways, houses, sparse = FALSE)
 cropped_houses_mask = cropped_blackout_mask_wo_highways[houses_blackout,]
 ```
 
 ```{r}
+# ?????? not sure if this is NEEDED to fix problem
+acs_geoms = st_transform(acs_geoms, crs = 3083)
+
+
+#st_crs(cropped_houses_mask)
+#st_crs(acs_geoms)
+
 # spatial join of building data with joined ACS data
-# joined <- st_join()
+joined <- st_join(cropped_houses_mask, acs_geoms)
 
 ```
 
