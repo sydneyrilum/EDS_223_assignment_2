@@ -172,6 +172,9 @@ st_crs(ROI) #WGS84
 # spatial subsetting in sf
 intersects <- st_intersects(blackout_mask, ROI, sparse = FALSE)
 cropped_blackout_mask = blackout_mask[intersects,]
+
+## ?????? use one line of code instead?
+# cropped_blackout_mask = blackout_mask[ROI, op = st_intersects]
 ```
 
 ```{r}
@@ -280,17 +283,20 @@ plot(cropped_blackout_mask_wo_highways)
 # use spatial subsetting to find all the residential buildings in blackout areas
 
 ### memory issues to run
-houses_blackout <- st_intersects(cropped_blackout_mask_wo_highways, houses, sparse = FALSE)
-cropped_houses_mask = cropped_blackout_mask_wo_highways[houses_blackout,]
+#houses_blackout <- st_intersects(cropped_blackout_mask_wo_highways, houses, sparse = FALSE)
+#cropped_houses_mask = cropped_blackout_mask_wo_highways[houses_blackout,]
+
+## instead use this
+cropped_houses_mask = cropped_blackout_mask_wo_highways[houses, op = st_intersects]
+
 ```
 
 ```{r}
-# ?????? not sure if this is NEEDED to fix problem
+st_crs(cropped_houses_mask)
+st_crs(acs_geoms)
+
+# NEEDED to fix non-matching crs problem
 acs_geoms = st_transform(acs_geoms, crs = 3083)
-
-
-#st_crs(cropped_houses_mask)
-#st_crs(acs_geoms)
 
 # spatial join of building data with joined ACS data
 joined <- st_join(cropped_houses_mask, acs_geoms)
