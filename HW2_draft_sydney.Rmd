@@ -299,7 +299,9 @@ st_crs(acs_geoms)
 acs_geoms = st_transform(acs_geoms, crs = 3083)
 
 # spatial join of building data with joined ACS data
-joined <- st_join(cropped_houses_mask, acs_geoms)
+joined <- st_join(cropped_houses_mask, acs_geoms, join = st_intersects, )
+
+#plot(joined)
 
 ```
 
